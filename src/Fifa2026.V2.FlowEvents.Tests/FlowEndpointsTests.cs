@@ -73,6 +73,29 @@ public sealed class FlowEndpointsTests : IClassFixture<FlowEndpointsTests.FlowAp
     }
 
     [Fact]
+    public async Task DiplomaSummary_returns_scoped_correlationIds_and_count()
+    {
+        // Story 4.6 — o resumo do Diploma retorna SÓ as compras do userId pedido, com count.
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/api/flow/diploma-summary?userId=42");
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        // O fake escopa por userId=42 → 2 compras (ver FakeFlowEventRepository).
+        Assert.Equal(2, body.GetProperty("count").GetInt32());
+        Assert.Equal(2, body.GetProperty("correlationIds").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task DiplomaSummary_rejects_non_numeric_userId()
+    {
+        // AC-6/AC-10 — userId não numérico é rejeitado (guard anti-abuso), nunca vaza dado.
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/api/flow/diploma-summary?userId=not-a-number");
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Replay_pushes_each_event_to_signalr_group()
     {
         var client = _factory.CreateClient();
@@ -134,6 +157,17 @@ public sealed class FlowEndpointsTests : IClassFixture<FlowEndpointsTests.FlowAp
         {
             IReadOnlyList<RecentPurchase> list = new[]
             {
+                new RecentPurchase { CorrelationId = Guid.NewGuid().ToString(), Timestamp = DateTimeOffset.UtcNow, Status = "ok" }
+            };
+            return Task.FromResult(list);
+        }
+
+        public Task<IReadOnlyList<RecentPurchase>> GetPurchasesByUserAsync(string userId, int top, CancellationToken cancellationToken = default)
+        {
+            // Story 4.6 — devolve 2 compras "do aluno" (escopadas) para provar count/escopo no teste.
+            IReadOnlyList<RecentPurchase> list = new[]
+            {
+                new RecentPurchase { CorrelationId = Guid.NewGuid().ToString(), Timestamp = DateTimeOffset.UtcNow, Status = "ok" },
                 new RecentPurchase { CorrelationId = Guid.NewGuid().ToString(), Timestamp = DateTimeOffset.UtcNow, Status = "ok" }
             };
             return Task.FromResult(list);

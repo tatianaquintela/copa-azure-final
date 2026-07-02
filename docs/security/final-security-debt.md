@@ -55,13 +55,21 @@ A **lógica** de hardening está correta e fail-closed **no código** (confirmad
 
 - Ainda seta `EntraTenantId/ClientId` (single-issuer) que o gateway dual-issuer atual ignora → startup guard falharia. Reconciliar com a config dual-issuer real.
 
+### 🟡 MEDIUM-4 — FlowEvents `/api/flow/diploma-summary` — telemetria por `userId` anônima no ingress externo (Story 4.6)
+
+- **Origem:** Story 4.6 (Diploma vivo) adicionou `GET /api/flow/diploma-summary?userId={id}` (`FlowEndpoints.cs`) reusando a MESMA fonte App Insights do F6. Herda **exatamente** a postura do MEDIUM-1: o FlowEvents tem ingress `external: true`, **não** revalida JWT e está **fora** do escopo do `X-Gateway-Key` (ADE-009 Inv 1 — teste `FlowEvents_Cluster_Does_NOT_Receive_GatewayKey`). Logo, no FQDN direto do `ca-flow` o endpoint é **anônimo na internet**.
+- **Vetor:** `userId` é o inteiro v1 **sequencial/enumerável**; um chamador anônimo pode iterar `userId=1,2,3…` e obter os correlation-IDs (GUIDs) de cada aluno. O gate `enabled: isAuthenticated` do React é só de UX (client-side) e o `fetchDiplomaSummary` **não envia Bearer** — não há controle de acesso server-side. Correção da claim anterior (que dizia "gateway autentica → só logados alcançam"): **factualmente falsa**, corrigida no Dev Agent Record da 4.6 e nos comentários do código.
+- **Mitigante (por que MEDIUM, não HIGH):** a resposta expõe **zero PII** — só `region` (env), `count` e **GUIDs opacos** (não vazam nome/e-mail/`oid`/valor de compra). É info disclosure do *vínculo* userId→GUIDs; o `/api/flow/recent` (F6, Story 2.6 Done) já expõe os MESMOS GUIDs **sem escopo algum** a qualquer chamador desde 2026. Delta real desta story = só o vínculo por userId, sobre dado que já era público.
+- **Decisão de aceite:** **owner** — contexto de lab didático, dado não-PII, mesma família do débito F6 já aceito (MEDIUM-1). Registrado, não corrigido nesta rodada (mudança só de documentação — restrição da tarefa).
+- **Remediação futura:** escopo infalsificável por identidade = JIT/`X-Entra-OID` no caminho do FlowEvents (o gateway já injeta `X-Entra-OID` nos clusters confiáveis; FlowEvents está fora — precisaria entrar), **ou** ingress interno do `ca-flow` + rota `/flow-events` autenticada no gateway (`RequireAuthorization()` blanket já existe) com o cliente passando o Bearer. Ambos tocam o caminho de identidade → adiado por AC-9 (retro-compat) desta story.
+
 ---
 
 ## Plano priorizado (para quando o débito for pago)
 
 1. **Armar `GATEWAY_SHARED_SECRET`/`Gateway__AdminSharedSecret` em todo pipeline** (gateway inject + Functions + McpServer + backend), ou fail-closed quando ausente em Produção (flip do `LegacyBypass` p/ opt-in explícito). Fecha CRITICAL-1 e HIGH-2. **→ Owner: armar ao vivo na subs HML agora (browser-harness); versionar depois.**
 2. **Defesa em profundidade nas Functions** — re-check `email_verified` antes do link na `MeFunction` + `AuthorizationLevel.Function`. Fecha HIGH-1.
-3. **Fixar ingress `internal` do McpServer/FlowEvents em IaC** + auth no FlowEvents. Fecha HIGH-2/MEDIUM-1.
+3. **Fixar ingress `internal` do McpServer/FlowEvents em IaC** + auth no FlowEvents. Fecha HIGH-2/MEDIUM-1/MEDIUM-4.
 4. **MI + Key Vault** — secrets → KV references via user-assigned MI; SQL conn → MI. Fecha HIGH-3.
 5. **Diagrama de topologia/segurança atualizado** + reconciliar `deploy-phase-03.yml`. Fecha MEDIUM-2/3.
 

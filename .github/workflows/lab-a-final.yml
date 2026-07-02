@@ -480,6 +480,9 @@ jobs:
             echo "::error::VITE_CIAM_CLIENT_ID e/ou VITE_FUNCTION_V2_URL vazios — o bundle sairia com login CIAM e/ou compra v2 mortos. Recrie as Variables das Quartas NESTE fork (ver nota de pré-requisito da Fase 10 do guia: docs/runbooks/final-portal-guide.md)."
             exit 1
           fi
+          # Story 4.6 (Diploma vivo) — hora do deploy INJETADA NO BUILD (infalsificável: nasce
+          # no runner do CI, nunca no navegador do aluno — AC-3). Vite expõe VITE_* de process.env.
+          export VITE_BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           npm run build
 
       - name: '[frontend] Guard — nenhuma API key de LLM vazou no bundle'

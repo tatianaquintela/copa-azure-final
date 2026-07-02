@@ -70,5 +70,31 @@ export async function replayFlow(correlationId: string): Promise<void> {
   });
 }
 
+/**
+ * Story 4.6 (Diploma vivo) — resumo da telemetria do PRÓPRIO aluno.
+ * `region` e `correlationIds` vêm do backend (infalsificáveis, AC-3): a região é resolvida
+ * no ambiente do FlowEvents e os correlation-IDs são ESCOPADOS ao userId v1 do aluno
+ * (customDimensions.UserId) — nenhum dado de outro aluno (AC-6). Reúso da MESMA fonte App
+ * Insights do F6 (AC-2), só filtrada. O `deployTime` NÃO vem daqui — é o build-time injetado
+ * no bundle (VITE_BUILD_TIME). `region` pode ser null se o ambiente não a expuser.
+ */
+export interface DiplomaSummary {
+  region: string | null;
+  correlationIds: string[];
+  count: number;
+}
+
+/** Story 4.6 — busca o resumo do Diploma escopado ao aluno logado (userId v1 do useAuth). */
+export async function fetchDiplomaSummary(userId: string): Promise<DiplomaSummary> {
+  const response = await fetch(
+    `${FLOW_BASE}/api/flow/diploma-summary?userId=${encodeURIComponent(userId)}`,
+    { headers: { Accept: 'application/json' } },
+  );
+  if (!response.ok) {
+    throw new Error(`Falha ao obter o resumo do Diploma (${response.status}).`);
+  }
+  return (await response.json()) as DiplomaSummary;
+}
+
 /** URL absoluta do Hub SignalR (via gateway). Usada pelo useFlowConnection. */
 export const FLOW_HUB_URL = `${FLOW_BASE}/hubs/flow`;
